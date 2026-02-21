@@ -52,6 +52,7 @@ The API can fail in several ways. Handle each:
 | No activities returned | No activities in the date range, or wrong account | Check the date range and verify the Strava account |
 | "Authorization Error" | App not authorized or scopes missing | Re-run `strava-auth.sh setup` |
 | Token file not found | OAuth setup not completed | Run `strava-auth.sh setup` |
+| "STRAVA_CLIENT_ID environment variable is not set" | Credentials not loaded — the refresh token is likely still valid | Don't tell the user to re-authenticate. Alert: "Strava credentials not available — check that STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET are set in the environment." |
 
 ---
 
