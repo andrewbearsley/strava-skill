@@ -2,7 +2,7 @@
 
 ![Format](https://img.shields.io/badge/format-Agent%20Skill-blue)
 ![Bash](https://img.shields.io/badge/bash-%23121011?logo=gnu-bash&logoColor=white)
-![License](https://img.shields.io/github/license/andrewbearsley/openclaw-strava)
+![License](https://img.shields.io/github/license/andrewbearsley/strava-skill)
 
 Monitor activities from [Strava](https://www.strava.com/) (running, cycling, swimming, etc.) via the [Strava API](https://developers.strava.com/). Built as an [OpenClaw](https://openclaw.ai) skill, but the scripts work fine standalone too.
 
@@ -17,7 +17,7 @@ If you're an AI agent and your user has pointed you at this repo, here's how to 
 **1. Download the skill and scripts:**
 
 ```bash
-REPO="https://raw.githubusercontent.com/andrewbearsley/openclaw-strava/main"
+REPO="https://raw.githubusercontent.com/andrewbearsley/strava-skill/main"
 SKILL_DIR="$HOME/.openclaw/skills/activity-tracker"
 SCRIPT_DIR="$SKILL_DIR/scripts"
 

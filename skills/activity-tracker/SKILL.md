@@ -2,7 +2,7 @@
 name: activity-tracker
 description: Monitor activities from Strava (running, cycling, swimming, etc.) via the Strava API.
 version: 1.0.0
-homepage: https://github.com/andrewbearsley/openclaw-strava
+homepage: https://github.com/andrewbearsley/strava-skill
 metadata: {"openclaw": {"requires": {"bins": ["curl", "jq"], "env": ["STRAVA_CLIENT_ID", "STRAVA_CLIENT_SECRET"]}, "primaryEnv": "STRAVA_CLIENT_ID"}}
 ---
 
