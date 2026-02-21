@@ -514,7 +514,10 @@ while true; do
     "${API_BASE}/athlete/activities?after=${START_DATE}&per_page=200&page=${PAGE}" \
     --max-time 30)
 
-  check_api_response "$RESPONSE" "activity list" || exit 1
+  # Activity list returns an array on success, object on error
+  if echo "$RESPONSE" | jq -e 'type == "object" and .message' >/dev/null 2>&1; then
+    check_api_response "$RESPONSE" "activity list" || exit 1
+  fi
 
   PAGE_COUNT=$(echo "$RESPONSE" | jq 'length')
 
