@@ -1,0 +1,9 @@
+CLAUDE.md
+.cursorrules
+.cursor/
+.env
+.env.local
+.env.*
+!.env.example
+*.tokens
+.strava-tokens
