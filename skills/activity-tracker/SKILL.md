@@ -15,6 +15,8 @@ You can monitor activities from Strava — running, cycling, swimming, hiking, e
 
 **Important:** Access tokens expire after 6 hours. Refresh tokens do not expire but are rotated on each refresh. The new refresh token MUST be saved immediately or you lose API access until the user re-authorizes.
 
+**Script paths:** All `scripts/` paths below are relative to the skill's install directory. If installed via the agent quick-start, that's `~/.openclaw/skills/activity-tracker/scripts/`. Adjust paths based on where you installed the skill.
+
 **All distances are in meters. All speeds are in meters/second. All times are in seconds.**
 
 ---

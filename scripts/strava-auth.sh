@@ -7,14 +7,12 @@
 #   ./strava-auth.sh refresh  Refresh the access token
 #   ./strava-auth.sh token    Output a valid access token (auto-refreshes if expired)
 #
-# Requires: curl, jq
+# Requires: curl, jq, openssl (setup only)
 # Environment: STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET
 
 set -euo pipefail
 
-# --- Dependency checks ---
-
-for cmd in curl jq openssl; do
+for cmd in curl jq; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "Error: Required command '$cmd' not found. Install it and try again." >&2
     exit 1
@@ -31,12 +29,9 @@ STRAVA_CLIENT_SECRET="${STRAVA_CLIENT_SECRET:?Error: STRAVA_CLIENT_SECRET enviro
 STRAVA_TOKEN_FILE="${STRAVA_TOKEN_FILE:-$HOME/.strava-tokens}"
 STRAVA_REDIRECT_URI="${STRAVA_REDIRECT_URI:-http://localhost:9876/callback}"
 
-# --- Helper functions ---
-
 save_tokens() {
   local access_token="$1" refresh_token="$2" expires_at="$3" athlete_id="$4"
 
-  # Validate fields before saving
   if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
     echo "Error: API response missing access_token" >&2
     return 1
@@ -46,16 +41,17 @@ save_tokens() {
     return 1
   fi
 
-  # Use umask to create file with 600 permissions from the start
   (
     umask 077
+    local tmp="${STRAVA_TOKEN_FILE}.tmp.$$"
     jq -n \
       --arg at "$access_token" \
       --arg rt "$refresh_token" \
       --arg ea "$expires_at" \
       --arg aid "$athlete_id" \
       '{access_token: $at, refresh_token: $rt, expires_at: ($ea | tonumber), athlete_id: $aid}' \
-      > "$STRAVA_TOKEN_FILE"
+      > "$tmp"
+    mv "$tmp" "$STRAVA_TOKEN_FILE"
   )
 }
 
@@ -66,7 +62,6 @@ load_tokens() {
     return 1
   fi
 
-  # Check file permissions
   local perms
   if [[ "$OSTYPE" == "darwin"* ]]; then
     perms=$(stat -f '%Lp' "$STRAVA_TOKEN_FILE")
@@ -78,7 +73,6 @@ load_tokens() {
     chmod 600 "$STRAVA_TOKEN_FILE"
   fi
 
-  # Validate structure
   local tokens
   tokens=$(cat "$STRAVA_TOKEN_FILE")
   if ! echo "$tokens" | jq -e '.access_token and .refresh_token and .expires_at' >/dev/null 2>&1; then
@@ -94,21 +88,19 @@ is_token_expired() {
   local expires_at now
   expires_at=$(echo "$tokens" | jq -r '.expires_at')
   now=$(date +%s)
-  # Refresh 5 minutes early to avoid edge cases
   [ "$now" -ge "$((expires_at - 300))" ]
 }
 
 check_api_response() {
   local response="$1" context="$2"
 
-  # Check response is valid JSON
   if ! echo "$response" | jq empty 2>/dev/null; then
-    echo "Error: Invalid response from Strava API during $context (network error?)" >&2
+    echo "Error: Invalid response from Strava API during $context" >&2
     return 1
   fi
 
   local msg
-  msg=$(echo "$response" | jq -r '.message // empty')
+  msg=$(echo "$response" | jq -r '.message // empty' | head -c 200)
   if [ -n "$msg" ]; then
     echo "Error: Strava API error during $context: $msg" >&2
     return 1
@@ -118,6 +110,11 @@ check_api_response() {
 # --- Commands ---
 
 do_setup() {
+  if ! command -v openssl &>/dev/null; then
+    echo "Error: Required command 'openssl' not found. Install it and try again." >&2
+    return 1
+  fi
+
   local state
   state=$(openssl rand -hex 16)
 
@@ -136,16 +133,13 @@ do_setup() {
   echo "" >&2
   read -rp "Paste the full redirect URL here: " redirect_url
 
-  # Validate state parameter
   local returned_state
   returned_state=$(echo "$redirect_url" | sed -n 's/.*[?&]state=\([^&#]*\).*/\1/p')
   if [ "$returned_state" != "$state" ]; then
-    echo "Error: State parameter mismatch. Expected '$state', got '$returned_state'." >&2
-    echo "This could indicate a CSRF attack or a stale URL. Try again." >&2
+    echo "Error: State parameter mismatch. This could indicate a CSRF attack or a stale URL. Try again." >&2
     return 1
   fi
 
-  # Extract the authorization code (strip fragments)
   local code
   code=$(echo "$redirect_url" | sed -n 's/.*[?&]code=\([^&#]*\).*/\1/p')
 
@@ -155,16 +149,31 @@ do_setup() {
     return 1
   fi
 
+  if ! [[ "$code" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "Error: Authorization code contains unexpected characters." >&2
+    return 1
+  fi
+
   echo "" >&2
   echo "Exchanging authorization code for tokens..." >&2
 
-  local response
-  response=$(curl -s -X POST "$TOKEN_URL" \
+  local response http_code
+  response=$(curl -s -w '\n%{http_code}' -X POST "$TOKEN_URL" \
     -d "client_id=${STRAVA_CLIENT_ID}" \
     -d "client_secret=${STRAVA_CLIENT_SECRET}" \
     -d "code=${code}" \
     -d "grant_type=authorization_code" \
     --max-time 30)
+
+  http_code="${response##*$'\n'}"
+  response="${response%$'\n'*}"
+
+  if [ "$http_code" -ge 400 ] 2>/dev/null; then
+    local msg
+    msg=$(echo "$response" | jq -r '.message // empty' 2>/dev/null | head -c 200)
+    echo "Error: HTTP $http_code from Strava during token exchange${msg:+: $msg}" >&2
+    return 1
+  fi
 
   check_api_response "$response" "token exchange" || return 1
 
@@ -192,13 +201,23 @@ do_refresh() {
   local refresh_token
   refresh_token=$(echo "$tokens" | jq -r '.refresh_token')
 
-  local response
-  response=$(curl -s -X POST "$TOKEN_URL" \
+  local response http_code
+  response=$(curl -s -w '\n%{http_code}' -X POST "$TOKEN_URL" \
     -d "client_id=${STRAVA_CLIENT_ID}" \
     -d "client_secret=${STRAVA_CLIENT_SECRET}" \
     -d "refresh_token=${refresh_token}" \
     -d "grant_type=refresh_token" \
     --max-time 30)
+
+  http_code="${response##*$'\n'}"
+  response="${response%$'\n'*}"
+
+  if [ "$http_code" -ge 400 ] 2>/dev/null; then
+    local msg
+    msg=$(echo "$response" | jq -r '.message // empty' 2>/dev/null | head -c 200)
+    echo "Error: HTTP $http_code from Strava during token refresh${msg:+: $msg}" >&2
+    return 1
+  fi
 
   check_api_response "$response" "token refresh" || return 1
 
